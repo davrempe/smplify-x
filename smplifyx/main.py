@@ -241,6 +241,7 @@ def main(**args):
                 body_model = male_model
 
             out_img_fn = osp.join(curr_img_folder, 'output.png')
+            overlay_img_fn = osp.join(curr_img_folder, 'overlay.png')
 
             fit_single_frame(img, keypoints[[person_id]],
                              body_model=body_model,
@@ -250,6 +251,7 @@ def main(**args):
                              output_folder=output_folder,
                              result_folder=curr_result_folder,
                              out_img_fn=out_img_fn,
+                             overlay_img_fn=overlay_img_fn,
                              result_fn=curr_result_fn,
                              mesh_fn=curr_mesh_fn,
                              shape_prior=shape_prior,

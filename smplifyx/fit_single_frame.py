@@ -60,7 +60,8 @@ def fit_single_frame(img,
                      angle_prior,
                      result_fn='out.pkl',
                      mesh_fn='out.obj',
-                     out_img_fn='overlay.png',
+                     out_img_fn='output.png',
+                     overlay_img_fn='overlay.png',
                      loss_type='smplify',
                      use_cuda=True,
                      init_joints_idxs=(9, 12, 2, 5),
@@ -550,11 +551,23 @@ def fit_single_frame(img,
         r = pyrender.OffscreenRenderer(viewport_width=W,
                                        viewport_height=H,
                                        point_size=1.0)
+        opt_start = time.time()
         color, _ = r.render(scene)
+        elapsed = time.time() - opt_start
+                tqdm.write(
+                    'Offscreen rendering done after {:.4f} seconds'.format(elapsed))
 
         color = color.astype(np.float32) / 255
 
-        output_img = color.copy()
+        output_img = color.copy() # (H, W, 3)
+        og_img = img.cpu().numpy()
 
+        # just mesh render
         img = pil_img.fromarray((output_img * 255).astype(np.uint8))
         img.save(out_img_fn)
+
+        # and overlaid on original image
+        fg_pixels = np.linalg.norm(output_img, axis=2) > 0.0
+        og_img[fg_pixels, :] = output_img[fg_pixels, :]
+        overlay_img = pil_img.fromarray((og_img * 255).astype(np.uint8))
+        overlay_img.save(overlay_img_fn)
