@@ -90,6 +90,8 @@ def fit_single_frame(img,
                      use_joints_conf=False,
                      interactive=True,
                      visualize=False,
+                     save_viz=False,
+                     pyopengl_platform='osmesa',
                      save_meshes=True,
                      degrees=None,
                      batch_size=1,
@@ -302,6 +304,7 @@ def fit_single_frame(img,
                                **kwargs)
     loss = loss.to(device=device)
 
+    os.environ['PYOPENGL_PLATFORM'] = pyopengl_platform
     with fitting.FittingMonitor(
             batch_size=batch_size, visualize=visualize, **kwargs) as monitor:
 
@@ -482,7 +485,7 @@ def fit_single_frame(img,
                 min_idx = 0
             pickle.dump(results[min_idx]['result'], result_file, protocol=2)
 
-    if save_meshes or visualize:
+    if save_meshes or save_viz:
         body_pose = vposer.decode(
             pose_embedding,
             output_type='aa').view(1, -1) if use_vposer else None
@@ -506,7 +509,7 @@ def fit_single_frame(img,
         out_mesh.apply_transform(rot)
         out_mesh.export(mesh_fn)
 
-    if visualize:
+    if save_viz:
         import pyrender
 
         material = pyrender.MetallicRoughnessMaterial(

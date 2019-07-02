@@ -57,6 +57,12 @@ def parse_config(argv=None):
                         type=lambda arg: arg.lower() == 'true',
                         default=False,
                         help='Display plots while running the optimization')
+    parser.add_argument('--save_viz',
+                        type=lambda arg: arg.lower() == 'true',
+                        default=False,
+                        help='Saves fitting result image (in the background, no displayed plot).')
+    parser.add_argument('--pyopengl_platform', type=str, default='osmesa',
+                        help='Backend to use for offscreen rendering (pyglet, osmesa, egl)')
     parser.add_argument('--degrees', type=float, default=[0, 90, 180, 270],
                         help='Degrees of rotation for rendering the final' +
                         ' result')
