@@ -554,8 +554,7 @@ def fit_single_frame(img,
         opt_start = time.time()
         color, _ = r.render(scene)
         elapsed = time.time() - opt_start
-                tqdm.write(
-                    'Offscreen rendering done after {:.4f} seconds'.format(elapsed))
+        tqdm.write('Offscreen rendering done after {:.4f} seconds'.format(elapsed))
 
         color = color.astype(np.float32) / 255
 
