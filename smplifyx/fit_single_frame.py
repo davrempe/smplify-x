@@ -501,6 +501,8 @@ def fit_single_frame(img,
 
         model_output = body_model(return_verts=True, body_pose=body_pose)
         vertices = model_output.vertices.detach().cpu().numpy().squeeze()
+        joints = model_output.joints.detach().cpu().numpy()
+        # print(joints.shape)
 
         import trimesh
 
@@ -513,60 +515,109 @@ def fit_single_frame(img,
     if save_viz:
         import pyrender
 
+        camera_center = camera.center.detach().cpu().numpy().squeeze()
+        camera_transl = camera.translation.detach().cpu().numpy().squeeze()
+        # x-axis is already flipped b/c of difference in coordinate systems.
+        camera_transl[1] *= -1.0 # flip y and z to apply to the mesh rather than the camera
+        camera_transl[2] *= -1.0
+
+        # set up the scene
         material = pyrender.MetallicRoughnessMaterial(
             metallicFactor=0.0,
             alphaMode='BLEND',
             baseColorFactor=(1.0, 1.0, 0.9, 1.0))
-        mesh = pyrender.Mesh.from_trimesh(
-            out_mesh,
-            material=material)
-
         scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0],
                                ambient_light=(0.3, 0.3, 0.3))
-        scene.add(mesh, 'mesh')
-
-        camera_center = camera.center.detach().cpu().numpy().squeeze()
-        camera_transl = camera.translation.detach().cpu().numpy().squeeze()
-
+        
+        # will always keep camera at the origin and instead transform mesh
         camera_pose = np.eye(4)
-        camera_pose[:3, 3] = camera_transl
+        # camera_pose[:3, 3] = camera_transl
 
         camera = pyrender.camera.IntrinsicsCamera(
             fx=focal_length, fy=focal_length,
             cx=camera_center[0], cy=camera_center[1])
-        scene.add(camera, pose=camera_pose)
+        main_cam_node = scene.add(camera, pose=camera_pose)
 
+        # add lights for front view
         light = pyrender.PointLight(color=[1.0, 1.0, 1.0], intensity=1)
 
         light_pose = np.eye(4)
-        light_pose[:3, 3] = [0, -1, 1]
-        scene.add(light, pose=light_pose)
+        light_pose[:3, 3] = [0, -1, camera_transl[2] + 1]
+        light0_node = scene.add(light, pose=light_pose)
 
-        light_pose[:3, 3] = [0, 1, 1]
-        scene.add(light, pose=light_pose)
+        light_pose[:3, 3] = [0, 1, camera_transl[2] + 1]
+        light1_node = scene.add(light, pose=light_pose)
 
-        light_pose[:3, 3] = [1, 1, 2]
-        scene.add(light, pose=light_pose)
+        light_pose[:3, 3] = [1, 1, camera_transl[2] + 2]
+        light2_node = scene.add(light, pose=light_pose)
 
         r = pyrender.OffscreenRenderer(viewport_width=W,
                                        viewport_height=H,
                                        point_size=1.0)
-        opt_start = time.time()
+
+        # FRONT VIEW
+        trans = trimesh.transformations.translation_matrix([camera_transl]) # move mesh, not camera
+        front_mesh = out_mesh.copy()
+        front_mesh.apply_transform(trans)
+        mesh = pyrender.Mesh.from_trimesh(
+            front_mesh,
+            material=material)
+        mesh_node = scene.add(mesh, 'mesh')
+
         color, _ = r.render(scene)
-        elapsed = time.time() - opt_start
-        tqdm.write('Offscreen rendering done after {:.4f} seconds'.format(elapsed))
+        tqdm.write('Front rendering done!')
 
         color = color.astype(np.float32) / 255
 
         output_img = color.copy() # (H, W, 3)
         og_img = img.cpu().numpy()
 
-        # just mesh render
+        # just mesh render from front
         img = pil_img.fromarray((output_img * 255).astype(np.uint8))
-        img.save(out_img_fn)
+        tok = out_img_fn.split('.')
+        front_out_path = tok[0] + '_front.' + tok[1]
+        img.save(front_out_path)
 
         # and overlaid on original image
         fg_pixels = np.linalg.norm(output_img, axis=2) > 0.0
         og_img[fg_pixels, :] = output_img[fg_pixels, :]
         overlay_img = pil_img.fromarray((og_img * 255).astype(np.uint8))
         overlay_img.save(overlay_img_fn)
+
+        # SIDE VIEW
+        scene.remove_node(mesh_node)
+        # update transformation for side view
+        rot = trimesh.transformations.rotation_matrix(
+            np.radians(90), [0, 1, 0])
+        side_transl = np.copy(camera_transl)
+        trans = trimesh.transformations.translation_matrix([camera_transl[2], camera_transl[1], camera_trans[0]])
+        side_transform = trimesh.transformations.concatenate_matrices(trans, rot)
+
+        side_mesh = out_mesh.copy()
+        side_mesh.apply_transform(side_transform)
+        mesh = pyrender.Mesh.from_trimesh(
+            side_mesh,
+            material=material)
+        mesh_node = scene.add(mesh, 'mesh')
+
+        color, _ = r.render(scene)
+        tqdm.write('Side rendering done!')
+        color = color.astype(np.float32) / 255
+        output_img = color.copy() # (H, W, 3)
+        # just mesh render from side
+        img = pil_img.fromarray((output_img * 255).astype(np.uint8))
+        side_out_path = tok[0] + '_side.' + tok[1]
+        img.save(side_out_path)
+
+        # TODO side and back cameras
+
+        
+
+        
+
+        # TODO run multiple times from dif cam view: Scene.main_camera_node
+        # TODO remove mesh node, transform for different views
+        
+        
+
+        
