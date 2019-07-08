@@ -475,6 +475,22 @@ def fit_single_frame(img,
             if use_vposer:
                 result['body_pose'] = pose_embedding.detach().cpu().numpy()
 
+            if save_meshes or save_viz:
+                body_pose = vposer.decode(
+                    pose_embedding,
+                    output_type='aa').view(1, -1) if use_vposer else None
+
+                model_type = kwargs.get('model_type', 'smpl')
+                append_wrists = model_type == 'smpl' and use_vposer
+                if append_wrists:
+                        wrist_pose = torch.zeros([body_pose.shape[0], 6],
+                                                dtype=body_pose.dtype,
+                                                device=body_pose.device)
+                        body_pose = torch.cat([body_pose, wrist_pose], dim=1)
+                model_output = body_model(return_verts=False, body_pose=body_pose)
+                joints = model_output.joints.detach().cpu().numpy()
+                result['body_joints'] = joints
+
             results.append({'loss': final_loss_val,
                             'result': result})
 
@@ -501,8 +517,6 @@ def fit_single_frame(img,
 
         model_output = body_model(return_verts=True, body_pose=body_pose)
         vertices = model_output.vertices.detach().cpu().numpy().squeeze()
-        joints = model_output.joints.detach().cpu().numpy()
-        # print(joints.shape)
 
         import trimesh
 
@@ -556,7 +570,7 @@ def fit_single_frame(img,
                                        point_size=1.0)
 
         # FRONT VIEW
-        trans = trimesh.transformations.translation_matrix([camera_transl]) # move mesh, not camera
+        trans = trimesh.transformations.translation_matrix(camera_transl) # move mesh, not camera
         front_mesh = out_mesh.copy()
         front_mesh.apply_transform(trans)
         mesh = pyrender.Mesh.from_trimesh(
@@ -575,7 +589,7 @@ def fit_single_frame(img,
         # just mesh render from front
         img = pil_img.fromarray((output_img * 255).astype(np.uint8))
         tok = out_img_fn.split('.')
-        front_out_path = tok[0] + '_front.' + tok[1]
+        front_out_path = '.'.join(tok[:-1]) + '_front.' + tok[-1]
         img.save(front_out_path)
 
         # and overlaid on original image
@@ -590,7 +604,8 @@ def fit_single_frame(img,
         rot = trimesh.transformations.rotation_matrix(
             np.radians(90), [0, 1, 0])
         side_transl = np.copy(camera_transl)
-        trans = trimesh.transformations.translation_matrix([camera_transl[2], camera_transl[1], camera_trans[0]])
+        # TODO for now just use same translation but look from side, can run viz after the fact later
+        # trans = trimesh.transformations.translation_matrix([camera_transl[2], camera_transl[1], camera_transl[0]])
         side_transform = trimesh.transformations.concatenate_matrices(trans, rot)
 
         side_mesh = out_mesh.copy()
@@ -600,14 +615,19 @@ def fit_single_frame(img,
             material=material)
         mesh_node = scene.add(mesh, 'mesh')
 
+        # TODO move lights
+
         color, _ = r.render(scene)
         tqdm.write('Side rendering done!')
         color = color.astype(np.float32) / 255
         output_img = color.copy() # (H, W, 3)
         # just mesh render from side
         img = pil_img.fromarray((output_img * 255).astype(np.uint8))
-        side_out_path = tok[0] + '_side.' + tok[1]
+        side_out_path = '.'.join(tok[:-1]) + '_side.' + tok[-1]
         img.save(side_out_path)
+
+        # TODO top view
+
 
         # TODO side and back cameras
 
