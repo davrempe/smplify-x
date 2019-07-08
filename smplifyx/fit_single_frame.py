@@ -490,7 +490,7 @@ def fit_single_frame(img,
                 model_output = body_model(return_verts=False, body_pose=body_pose)
                 joints = model_output.joints.detach().cpu().numpy()
                 result['body_joints'] = joints
-                result['body_pose_aa'] = body_pose
+                result['body_pose_aa'] = body_pose.detach().cpu().numpy()
 
             results.append({'loss': final_loss_val,
                             'result': result})
